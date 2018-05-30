@@ -8,6 +8,7 @@ This project was an exercise in object oriented programming in C++ in conjunctio
 - User control for setting the max operand in the equation
 - Live list(s) of all of the correct/incorrect answers
 - Recycling of the equations that were answered incorrectly
+- Production of a hint upon 3 wrong answers
 - Score keeping
 - A summary window displaying various performance statistics
 
