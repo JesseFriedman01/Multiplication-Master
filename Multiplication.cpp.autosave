@@ -1,0 +1,236 @@
+#include <iostream>
+#include <cstdlib>
+#include <ctime>
+#include <cassert>
+#include "Multiplication.h"
+#include <QDebug>
+
+using namespace std;
+
+// default constructor
+// Purpose: initialize data members to default values
+// Precondition: random generator seed is initialized 
+// Postcondition: new multiplication object with random operators between 0 
+// and 10
+Multiplication::Multiplication()  	
+{
+    max_limit = 3;
+	new_operands();
+	// op1 = rand() % (max_limit+1) 
+	// op2 = the same
+
+    wrong_counter = 0;
+
+}
+// specific constructor
+// Purpose: initialize a new multiplication object with a set max_limit
+// Precondition: 1) random generator seed is initialized
+//               2) new_max_limit > 0
+// Postcondition: data in the new object: op1 and op2 are random values between
+// 0 and new_max_limit
+
+Multiplication::Multiplication(int new_max_limit) 	
+{
+   assert(new_max_limit > 0);
+   max_limit = new_max_limit;
+   new_operands(); // set op1 and op2 randomly
+   wrong_counter = 0;
+}
+
+// displays the data of a Multiplication object
+// Preconditions: none
+// Postconditions: none
+void Multiplication::display() const   
+{
+
+//	cout << op1 << " X " << op2 << endl;
+//	cout << "Max operand value is " << max_limit << endl;
+}
+
+// returns the result of the multiplication 
+// Preconditions: none
+// Postconditions: none
+int Multiplication::get_result() const
+{
+   return op1*op2;
+}
+
+// is_bigger = compare the calling object with the passed object (other)
+// result is true if the result of the multiplication for the calling object 
+// is larger than the result of the multiplication for the other object
+
+bool Multiplication::is_bigger(const Multiplication &other) const
+{
+   return (get_result() > other.get_result() );
+   // "this" is a pointer to the calling object use -> instead of . 
+   // the expressions below are all equivalent
+   // 1. get_result()
+   // 2. (*this).get_result()
+   // 3. this -> get_result();
+}
+
+
+
+// display hint 
+// op1 = 2, op2 = 3: 
+//        2 * 1 = 2 
+//        2 * 2 = 4
+//        2 * 3 = ?
+// Preconditions: max_limit <= 10
+ 
+QString Multiplication::hint() const
+{
+   QString hint_str;
+   int start = 1;
+
+   if ( op1 == 0 || op2 == 0 )
+      hint_str = "Any number multiplied by 0 is 0.";
+   else if ( op1 == 1 || op2 == 1 )
+      hint_str = "Any number multiplied by 1 is itself.";
+   else
+   {
+
+    if ( op2 > 5 )
+        start = op2 - 5;
+
+    for ( int i = start;  i < op2; i++ )
+        hint_str += QString::number(op1) + " * " + QString::number(i) + " = " + QString::number(op1 * i) + "\n";
+
+    hint_str += QString::number(op1) + " * " + QString::number(op2) + " = ?\n";
+    }
+
+   return hint_str;
+}
+
+// accessor functions: access the data members, don't modify it
+
+// if user_result == op1* op2 return true
+// Preconditions: none;
+// Postconditions: none
+bool Multiplication::check_result(int user_result) const
+{ 
+	return (op1*op2 == user_result); 
+}
+					
+// mutator functions: change data members 
+
+// set_max_limit = changes the value of max_limit
+// Precondition: new_max_limit > 0
+// Postcondition: max_limit value is changed to new_max_limit and 
+// new values are being assigned randomly to the two operands 
+void  Multiplication::set_max_limit(int new_max_limit)
+{
+	assert(new_max_limit > 0);
+	max_limit = new_max_limit;
+    new_operands();
+}
+
+// new_operands() = assign new, random values to op1 and op2 between 0 and
+//  max_limit			
+//	Preconditions: none
+//  Postconditions:  operand values changed
+void Multiplication::new_operands()
+{
+	op1 = rand() % (max_limit + 1);  // possible values are 0, 1,... max_limit
+    op2 = rand() % (max_limit + 1);
+}
+
+
+// sets op1, op2, wrong_counter to op1, op2, wrong_counter of mult_object
+void Multiplication::set_operands(Multiplication mult_object)
+{
+    op1 = mult_object.return_operands(1); 
+    op2 = mult_object.return_operands(2);
+    wrong_counter = mult_object.get_wrong_count();
+
+}
+
+// returns op1 and op2
+int Multiplication::return_operands (int op_choice) const
+{
+    if (op_choice == 1)
+        return op1;
+    else
+        return op2;
+}
+
+// sets wrong count
+void Multiplication::set_wrong_count (int num_wrongs)
+{
+    if (num_wrongs == 0)
+        wrong_counter = 0;
+    else if (num_wrongs == 1)
+        wrong_counter += 1;
+}
+
+// gets wrong count 
+int Multiplication::get_wrong_count() const
+{
+    return wrong_counter;
+}
+
+// returns if a pair of generated operands are unique  
+bool Multiplication::unique_ops(list<Multiplication> list_name)
+{
+    //new_operands();
+
+    list<Multiplication>::iterator it; // iterator for list of  Multiplication objects
+    bool unique = true;
+
+    for ( it = list_name.begin(); it != list_name.end(); it++ ) // iterate through list
+    {
+        if ( it->return_operands( 1 ) == op1 && it->return_operands( 2 ) == op2 ) // check to see if newly generate op1 & op2 are unique (op1, op2)
+            unique = false;
+        else if ( it->return_operands( 2 ) == op1 && it->return_operands( 1 ) == op2 ) // check to see if newly generate op1 & op2 are unique (op2, op1)
+            unique = false;
+    }
+
+    return unique;
+}
+
+
+// didn't use this but kept it in for future reference
+
+//int Multiplication::factorial_calc(int val) const
+//{
+//    int factorial = 1;
+
+//    for( int i = 1; i <= val; i++)
+//        factorial = factorial * i;
+
+//    return factorial;
+//}
+
+
+// simple formula to calculate how manu unique equations there should be based on max_limit. I impressed myself with this one :-) 
+int Multiplication::num_unique_pairs() const
+{
+//    int r = 2;
+//    int n = max_limit + 1;
+
+//    int numerator = factorial_calc( n + r - 1 );
+
+//    int denominator =  r  * factorial_calc( n - 1);
+
+    int n = ( (max_limit + 2) * ( max_limit + 1 ) ) / 2;
+
+    return ( (n) );
+
+}
+
+	
+	
+	
+	
+	
+	
+	
+	
+					
+					
+					
+					
+					
+					
+					
+					

@@ -1,0 +1,373 @@
+#include "mainwindow.h"
+#include "ui_mainwindow.h"
+
+#include "QDebug"
+#include <cstdlib>
+#include <ctime>
+#include <QDateTime>
+#include "end_of_game.h"
+#include "out_of_nums.h"
+#include "settings.h"
+
+/***** Class constructor *****/
+MainWindow::MainWindow(QWidget *parent) :
+
+    QMainWindow(parent), // provides an application window
+    ui(new Ui::MainWindow)
+{
+    ui->setupUi(this);
+
+    this->setWindowFlags(Qt::Dialog | Qt::MSWindowsFixedSizeDialogHint); // remove resize window ability
+
+    pointer_Mult = new Multiplication(); // pointer to a dynamically allocated Multiplication object
+    pointer_Logging = new Logging(); // pointer to a dynamically allocated Logging object
+
+    srand ( time(NULL) ); // set seed for random number based on time
+
+    ui->hint->hide(); // hide the hint textbox on start
+
+    is_new_problem = true;
+
+    problem_type = 0;
+
+    QPixmap blackboard(":/files/images/blackboard5.jpg"); // this is cool -- background image as set in Resources (don't need to identify exact file location)
+    QPixmap qmark(":/files/images/questionmark.png");
+
+    ui->label_3->setPixmap(blackboard); // image must be set in a label 
+    ui->label_14->setPixmap(qmark);
+
+    score = 0;
+
+    connect(ui->lineEdit, SIGNAL(returnPressed()), ui->check_answer_button, SIGNAL(clicked())); // use enter button as an alterative to a mouse click to check answer
+}
+
+/***** Class destructor *****/
+MainWindow::~MainWindow()
+{
+    delete ui;
+}
+
+// Sets max limit for op1 and op2
+void MainWindow::set_max_limit(int max_limit_from_user) const
+{
+    pointer_Mult->set_max_limit( max_limit_from_user ); // call set_max_limit function from Multiplication class of object pointed to by pointer_Mult
+}
+
+// Initializes timer for the countdown feature
+void MainWindow::initialize_timer()
+{
+    timer = new QTimer(this); // initalize timer
+    connect(timer,SIGNAL(timeout()), this ,SLOT(myTimerHandler())); // when timer is at 0, call myTimerHandler function 
+    timer->start(1000);  // call the myTimerHandler function every second
+}
+
+// Function for behavior of countdown timer
+void MainWindow::myTimerHandler()
+{
+    if ( countdown > 0 ) 
+       {
+        countdown--; // decrement countdown by 1
+        ui->lcdTimer->setEnabled(true); // enable the timer label in the window
+        ui->lcdTimer->show(); // show the timer window
+        ui->lcdTimer->display(  QString::number( countdown) ); // set the label to countdown 
+        }
+
+    else if (countdown == 0) // if countdown is at 0 (timed out)
+    {
+        if ( problem_type == 0) // new question 
+            {
+            pointer_Mult->set_wrong_count( 1 ); // set its wrong count to 1
+            pointer_Logging->list_include(*pointer_Mult, 0); // include it in the incorrect list
+            }
+        else // the equation is old/incorrect 
+            {
+            incorrect_object.set_wrong_count( 1 ); // add 1 to its incorrect total
+            pointer_Logging->incorrect_push_back( incorrect_object ); // push it to the back of the incorrect list
+            }
+
+        ui->lineEdit->setText("");
+
+        problem_type_router(); 
+     }
+
+    else if ( countdown == -1 ) // user didn't want a timer 
+         ui->lcdTimer->setEnabled(false);
+}
+
+// Disables the timer
+void MainWindow::disable_timer() const
+{
+    ui->lcdTimer->setDisabled(true);
+    ui->lcdTimer->display(99); // just a default value -- can also be 88 or 00 
+}
+
+// Set the amount of time for the countdown (e.g. 10 seconds)
+void MainWindow::set_timer_amount(int timer_amount_from_user)
+{
+    countdown_from_user = timer_amount_from_user; // this is received from settings window (default is 10 seconds)
+}
+
+// Determine what type of equation to generate (new and unique or old and incorrect)
+void MainWindow::problem_type_router()
+{
+    ui->result_label->hide();
+    ui->hint->hide();
+    ui->label_9->hide();
+    ui->lineEdit->setText("");
+
+    ui->label_12->setText(  QString::number (pointer_Mult->num_unique_pairs() - pointer_Logging->list_size("both") ) ); // # of unique pairs remaining 
+
+    ui->scoreLabel->setText(QString::number(score));
+
+    countdown = countdown_from_user; // reset the countdown 
+
+    int rand_num = rand() % (10 + 1); // generate a random # from 1 - 10
+    int probability = 7; // if > 7 recycle an old/incorrect equation (if they're are any), if <= 7 generate a new one (if any left). Future version may make this a user value as 7 is arbitrary .
+
+    ui->correctTextEdit->setText( pointer_Logging->return_correct_list_str( false ) ); // generate correct list for it's label 
+    ui->incorrectTextEdit->setText( pointer_Logging->return_incorrect_list_str( false ) ); // generate incorrect list for it's label 
+
+    if ( pointer_Logging->list_size("both")  == 0 )     // first problem of game
+        {
+        problem_type = 0;   // will always be a new equation as its first
+        gen_new_ops(); 
+        }
+
+    else if (  rand_num <= probability ) // if its not the first equation and the random number is <= 7
+        {
+        if ( pointer_Logging->list_size("both") < pointer_Mult->num_unique_pairs()   )  // there are still unique pairs to generate
+            {
+            problem_type = 0; // new equation 
+            gen_new_ops();
+            }
+
+        else if ( ( pointer_Logging->list_size("both")  >= pointer_Mult->num_unique_pairs() ) && pointer_Logging->list_size("incorrect") > 0 ) // no more new equations to generate but there are old/incorrect ones left
+            {
+            problem_type = 1; // old equation 
+            incorrect_object = pointer_Logging->return_incorrect(); // get an incorrect object
+            temp_incorrect_wrong_count = incorrect_object.get_wrong_count(); // get the object's current incorrect count
+            display( problem_type ); 
+            }
+
+        else
+            {
+            countdown = -1; // no more equations (new or old)!
+            game_over(true);
+            }
+        }
+
+     else if ( rand_num > probability ) 
+            {
+            if ( pointer_Logging->list_size("incorrect") > 0 ) // if there are incorrect equations left
+                {
+                problem_type = 1; // old equation 
+                incorrect_object = pointer_Logging->return_incorrect(); // get an incorrect object
+                temp_incorrect_wrong_count = incorrect_object.get_wrong_count(); // get the object's current incorrect count
+                display( problem_type ); 
+                }
+            else if ( pointer_Logging->list_size("incorrect") == 0 && ( pointer_Logging->list_size("both") < pointer_Mult->num_unique_pairs() ) ) // the random number called for an old equation but there are none and there are new equations left to generate
+                {
+                problem_type = 0; // new equation
+                gen_new_ops(); // get a new equation 
+                }
+            else
+                {
+                countdown = -1; // no more equations (new or old)!
+                game_over(true);
+                }
+            }
+
+    if ( problem_type == 0 )
+        ui->questiontypeLabel->setText( "New" );
+    else
+        ui->questiontypeLabel->setText( "Old" );
+}
+
+// Set data to display
+void MainWindow::display( int problem_type )
+{
+    QString op1_string;
+    QString op2_string;
+
+    if ( problem_type == 0 ) // new equation 
+        {
+        op1_string = QString::number(pointer_Mult->return_operands(1)); // get new op1 
+        op2_string = QString::number(pointer_Mult->return_operands(2)); // get new op2
+        }
+    else
+        {
+        op1_string = QString::number(incorrect_object.return_operands(1)); // get old op1
+        op2_string = QString::number(incorrect_object.return_operands(2)); // get old op2
+        }
+
+    ui->label->setText(op1_string);
+    ui->label_2->setText(op2_string);
+ }
+
+// Generate new (not necessarily unique) operands
+void MainWindow::gen_new_ops()
+{
+    pointer_Mult->set_wrong_count( 0 ); 
+
+    pointer_Mult->new_operands(); // generate new operands
+
+    if ( pointer_Mult->unique_ops( pointer_Logging->list_return(0)) == true && pointer_Mult->unique_ops( pointer_Logging->list_return(1)) == true ) // check if the operands are unique
+        display( 0 );
+    else // if they aren't unique
+        {
+        while ( pointer_Mult->unique_ops( pointer_Logging->list_return(0)) == false || pointer_Mult->unique_ops( pointer_Logging->list_return(1)) == false ) 
+            {
+            if ( ( pointer_Logging->list_size("both") ) < pointer_Mult->num_unique_pairs() ) // and there are still potential new equations left
+                {
+                pointer_Mult->new_operands(); // keep calling new operands 
+                display( 0 );
+                }
+            }
+        }
+}
+
+// Function for behavior of Skip button
+void MainWindow::on_pushButton_clicked()
+{
+    if ( problem_type == 0 ) // new problem 
+        {
+        pointer_Mult->set_wrong_count( 1 ); // skipped it so add to wrong count
+        pointer_Logging->list_include(*pointer_Mult, 0); // include it in correct list
+        }
+    else // old problem 
+        {
+        incorrect_object.set_wrong_count( 1 ); // skipped it so add to wrong count
+        pointer_Logging->incorrect_push_back( incorrect_object ); // push to back of incorrect list
+        }
+
+    ui->lineEdit->setText("");
+
+    problem_type_router();
+}
+
+// Function for behavior of Check Answer button
+void MainWindow::on_check_answer_button_clicked()
+{
+    int guess = -1; // current user answer
+
+    if ( ui->lineEdit->text() != "" )
+        guess =  ui->lineEdit->text().toInt(); // get the actual user answer and put it in guess
+
+    bool check_answer;
+
+    check_answer = pointer_Mult->check_result(guess); // send the guess to check_result function in Multiplication class (return true/false)
+
+    if ( problem_type == 0 ) // if new problem 
+       check_answer = pointer_Mult->check_result(guess);
+    else
+       check_answer = incorrect_object.check_result(guess);
+
+    if ( check_answer && problem_type == 0 ) // if right answer and its a new problem 
+    {
+
+        if ( pointer_Mult->get_wrong_count() == 0 ) // if no incorrect attempts
+              {
+               pointer_Logging->list_include(*pointer_Mult, 1); // add to correct list
+               score += 5; // increment score by 1
+              }
+        else
+              pointer_Logging->list_include(*pointer_Mult, 0); // user got it right but had prior incorrect answers, add to incorrect list
+
+        problem_type_router(); // go to next question 
+     }
+
+    else if ( check_answer && problem_type == 1 ) // right answer and old equation
+    {
+
+        if ( temp_incorrect_wrong_count == incorrect_object.get_wrong_count() ) // user got it correct on first attempt of a recycled question 
+            {
+            score += 1; // increment score by 1
+            pointer_Logging->incorrect_to_correct( incorrect_object ); // transfer equation (object) to correct list
+            }
+        else
+            pointer_Logging->incorrect_push_back( incorrect_object ); // push it to the back of the incorrect list
+
+        problem_type_router(); // go to next question 
+     }
+
+    else if ( check_answer == false && problem_type == 0 ) // wrong answer and new problem 
+        {
+        pointer_Mult->set_wrong_count( 1 ); // increment wrong count by 1
+
+        if ( pointer_Mult->get_wrong_count() == 3 ) // if 3 incorrect guesses
+            {
+            ui->hint->setText( pointer_Mult->hint() ); // get the hint string 
+            ui->label_9->show(); 
+            ui->hint->show(); // show the hint 
+            }
+
+        ui->result_label->setText( QChar(0x2718) ); // set the text to ascii character X
+        ui->result_label->show();
+
+        if ( pointer_Mult->get_wrong_count() > 3) // if wrong answer > 3 times
+            {
+             pointer_Logging->list_include(*pointer_Mult, 0); // include it in incorrect list
+             problem_type_router(); // go to next question 
+            }
+        }
+    else
+        {
+        incorrect_object.set_wrong_count( 1 ); // wrong answer and old problem 
+
+        if ( incorrect_object.get_wrong_count() % 3 == 0 ) // got it wrong again 3 times
+            {
+            ui->hint->setText( incorrect_object.hint() ); 
+            ui->label_9->show();
+            ui->hint->show(); // show hint 
+            }
+
+        ui->result_label->setText( QChar(0x2718) ); // set the text to ascii character X
+        ui->result_label->show();
+
+        if ( incorrect_object.get_wrong_count() % 4 == 0 ) // got it wrong again 4 times
+            {
+            pointer_Logging->incorrect_push_back( incorrect_object ); // push it to the back of the incorrect list 
+            problem_type_router(); // go to next question 
+            }
+        }
+}
+
+// Function for behavior of Quit button
+void MainWindow::on_quit_button_clicked()
+{
+    game_over(false);
+}
+
+
+// Sends relevant data to end_of_game class (window)
+void MainWindow::game_over(bool out_of_nums_bool)
+{
+    end_of_game *pointer_end_of_game = new end_of_game();
+
+    pointer_end_of_game->total_questions = pointer_Logging->list_size("both");
+
+    pointer_end_of_game->total_correct_answers = pointer_Logging->list_size("correct");
+    pointer_end_of_game->total_incorrect_answers = pointer_Logging->list_size("incorrect");
+
+    pointer_end_of_game->total_correct_list = pointer_Logging->return_correct_list_str( true );
+    pointer_end_of_game->total_incorrect_list = pointer_Logging->return_incorrect_list_str( true );
+
+    pointer_end_of_game->total_incorrect_sum = pointer_Logging->return_incorrect_sum();
+
+    pointer_end_of_game->total_first_attempt = pointer_Logging->return_correct_first_try();
+
+    pointer_end_of_game->total_score = score;
+
+    pointer_end_of_game->set_data();
+
+    if ( out_of_nums_bool ) // no more equations left (new or old)
+        {
+        out_of_nums *pointer_out_of_nums = new out_of_nums; 
+        pointer_out_of_nums->set_end_game(pointer_end_of_game);
+        pointer_out_of_nums->show(); // show special out_of_nums window 
+        }
+    else // quit but there were still equations left 
+        pointer_end_of_game->show();
+
+    this->close(); // close this window
+}
